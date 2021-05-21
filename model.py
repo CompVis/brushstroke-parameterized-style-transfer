@@ -155,9 +155,6 @@ class BrushstrokeOptimizer:
             steps = trange(self.num_steps, desc='', leave=True)
             for step in steps:
                 
-                I_first = sess.run(self.I)
-                Image.fromarray(np.array(np.clip(I_first, 0, 1) * 255, dtype=np.uint8)).save(f'logging/stroke_optim/first.jpg')
-
                 I_, loss_dict_, params_dict_, _ = \
                     sess.run(fetches=[self.I, 
                                       self.loss_dict, 
