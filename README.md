@@ -2,7 +2,7 @@
 
 <div align="center"><img src="docs/img/title_figure.jpg" alt="img" width="1050"></div>
 
-### [Project page](https://compvis.github.io/brushstroke-parameterized-style-transfer/) | [Paper](https://arxiv.org/abs/2103.17185) | [Colab](https://github.com/CompVis/brushstroke-parameterized-style-transfer) | [Colab for Drawing App](https://github.com/CompVis/brushstroke-parameterized-style-transfer)
+### [Project page](https://compvis.github.io/brushstroke-parameterized-style-transfer/) | [Paper](https://arxiv.org/abs/2103.17185) | [Colab](https://colab.research.google.com/drive/1J9B6_G2DSWmaBWw9Ot80W9t7O6pWu8Kw?usp=sharing) | [Colab for Drawing App](https://colab.research.google.com/drive/1ALNRoZgCj35uJ3Xvs24-QDwwtCb2lm3P?usp=sharing)
 
 Rethinking Style Transfer: From Pixels to Parameterized Brushstrokes.  
 [Dmytro Kotovenko*](https://scholar.google.de/citations?user=T_U8yxwAAAAJ&hl=en), [Matthias Wright*](http://www.matthias-wright.com/), [Arthur Heimbrecht](http://www.aheimbrecht.de/), and [Björn Ommer](https://hci.iwr.uni-heidelberg.de/people/bommer).<br>
@@ -43,7 +43,7 @@ stylized_img = model.stylize(content_img,
 
 stylized_img.save('images/stylized.jpg')
 ```
-or open [Colab](https://github.com/CompVis/brushstroke-parameterized-style-transfer).
+or open [Colab](https://colab.research.google.com/drive/1J9B6_G2DSWmaBWw9Ot80W9t7O6pWu8Kw?usp=sharing).
 
 ## Drawing App
 We created a [Streamlit](https://streamlit.io/) app where you can draw curves to control the flow of brushstrokes.
@@ -62,7 +62,7 @@ You can also run the app on a remote server and forward the port to your local m
 
 
 #### Run streamlit app from Colab
-If you don't have access to GPUs we also created a [Colab](www.google.com) from which you can start the drawing app. 
+If you don't have access to GPUs we also created a [Colab](https://colab.research.google.com/drive/1ALNRoZgCj35uJ3Xvs24-QDwwtCb2lm3P?usp=sharing) from which you can start the drawing app. 
 
 
 ## Citation
