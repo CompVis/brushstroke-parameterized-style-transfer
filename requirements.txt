@@ -1,0 +1,9 @@
+Pillow==7.2.0
+tqdm
+requests==2.24.0
+scikit-image==0.17.2
+numpy==1.19.1
+scikit-learn
+streamlit==0.70.0
+streamlit-drawable-canvas
+stqdm
