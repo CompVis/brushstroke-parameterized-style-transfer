@@ -64,6 +64,10 @@ You can also run the app on a remote server and forward the port to your local m
 #### Run streamlit app from Colab
 If you don't have access to GPUs we also created a [Colab](https://colab.research.google.com/drive/1ALNRoZgCj35uJ3Xvs24-QDwwtCb2lm3P?usp=sharing) from which you can start the drawing app. 
 
+## Other implementations
+
+[Pytorch](https://github.com/justanhduc/brushstroke-parameterized-style-transfer)
+
 
 ## Citation
 ```
