@@ -25,9 +25,14 @@ def parse_paths(json_obj, height, width):
 
 
 def sample_vectors(points, lookahead=10, freq=10):
-    idcs = np.arange(points.shape[0])[::freq]
+    if points.shape[0] > 30:
+        idcs = np.arange(points.shape[0])[::freq]
+
+    idcs = np.arange(points.shape[0])
     vectors = []
     positions = []
+
+    lookahead = min(lookahead, idcs.shape[0] - 1)
     for i in range(idcs.shape[0] - lookahead):
         vectors.append(points[idcs[i] + lookahead] - points[idcs[i]])
         positions.append(points[idcs[i]])
@@ -163,10 +168,11 @@ if content_img is not None and style_img is not None:
             height = 512
             factor *= width / height
 
+
     st.text('Now draw some curves on the canvas.')
     st.text('To draw a curve:')
     st.text('- hold down the left mouse button')
-    st.text('- and slowly move the mouse over the canvas.')
+    st.text('- and move the mouse over the canvas.')
 
     # Create a canvas component
     canvas_result = st_canvas(
@@ -190,7 +196,15 @@ if content_img is not None and style_img is not None:
                 img_array = np.array(content_img)
                 for i in range(len(canvas_result.json_data['objects'])):
                     points = parse_paths(canvas_result.json_data['objects'][i], float(height), float(width))
+
+                    if points.shape[0] == 0:
+                        continue
+
                     vectors, positions = sample_vectors(points, lookahead=5, freq=5)
+                    
+                    if vectors.ndim < 2 or positions.ndim < 2:
+                        continue
+
                     vectors_all.append(vectors)
                     positions_all.append(positions)
 
