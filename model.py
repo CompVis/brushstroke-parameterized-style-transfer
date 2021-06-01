@@ -295,11 +295,11 @@ class PixelOptimizer:
     def __init__(self,
                  canvas,                              # Canvas (PIL.Image).
                  style_img,                           # Style image (PIL.Image).
-                 resolution          = 1024,           # Resolution of the canvas.
-                 num_steps           = 2000,           # Number of optimization steps.
+                 resolution          = 1024,          # Resolution of the canvas.
+                 num_steps           = 2000,          # Number of optimization steps.
                  content_weight      = 1.0,           # Weight for the content loss.
-                 style_weight        = 10000.0,           # Weight for the style loss.
-                 tv_weight           = 0.0,        # Weight for the total variation loss.
+                 style_weight        = 10000.0,       # Weight for the style loss.
+                 tv_weight           = 0.0,           # Weight for the total variation loss.
                  streamlit_pbar      = None,          # Progressbar for streamlit app (obj).
                  dtype               = 'float32'      # Data type.
                 ):
