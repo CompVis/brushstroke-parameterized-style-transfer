@@ -3,7 +3,6 @@ with warnings.catch_warnings():
     warnings.filterwarnings('ignore', category=RuntimeWarning)
     warnings.filterwarnings('ignore', category=FutureWarning)
     import tensorflow as tf
-    from tensorflow.core.protobuf import config_pb2
 
 import os
 import numpy as np
@@ -13,9 +12,6 @@ from tqdm import trange
 import networks
 import ops
 import utils
-
-tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 
 def stylize(content_img,
@@ -92,6 +88,9 @@ class BrushstrokeOptimizer:
                  dtype                    = 'float32'      # Data type (str).
                 ):
     
+        #content_img = Image.open(f'/export/home/mwright/data/neural_painter/image_pairs/photos/{self.args.content_img}')
+        #style_img = Image.open(f'/export/home/mwright/data/neural_painter/image_pairs/artworks/{self.args.style_img}')
+
         self.draw_strength = draw_strength
         self.draw_weight = draw_weight
         self.resolution = resolution
@@ -145,35 +144,15 @@ class BrushstrokeOptimizer:
 
     def optimize(self):
         self._initialize()
-        self._render()
-        self._losses()
-        self._optimizer()
 
+        steps = trange(self.num_steps, desc='', leave=True)
+        for step in steps:
+            self._optimize()
+            steps.set_description(f'content_loss: {self.loss_dict["content"].numpy().item():.6f},\
+                                  style_loss: {self.loss_dict["style"].numpy().item():.6f}')
 
-        with tf.Session() as sess:
-            sess.run(tf.global_variables_initializer())
-            steps = trange(self.num_steps, desc='', leave=True)
-            for step in steps:
-                
-                I_, loss_dict_, params_dict_, _ = \
-                    sess.run(fetches=[self.I, 
-                                      self.loss_dict, 
-                                      self.params_dict, 
-                                      self.optim_step_with_constraints],
-                             options=config_pb2.RunOptions(report_tensor_allocations_upon_oom=True)
-                            )
-
-                steps.set_description(f'content_loss: {loss_dict_["content"]:.6f}, style_loss: {loss_dict_["style"]:.6f}')
-                #s = ''
-                #for key in loss_dict_:
-                #    loss = loss_dict_[key]
-                #    s += key + f': {loss_dict_[key]:.4f}, '
-                #steps.set_description(s[:-2])
-                #print(s)
-
-                steps.refresh()
-                if self.streamlit_pbar is not None: self.streamlit_pbar.update(1)
-        return Image.fromarray(np.array(np.clip(I_, 0, 1) * 255, dtype=np.uint8))
+            if self.streamlit_pbar is not None: self.streamlit_pbar.update(1)
+        return Image.fromarray(np.array(np.clip(self._render().numpy(), 0, 1) * 255, dtype=np.uint8))
 
     def _initialize(self):
         location, s, e, c, width, color = utils.initialize_brushstrokes(self.content_img_np, 
@@ -210,84 +189,102 @@ class BrushstrokeOptimizer:
                                                          num_points=self.S,
                                                          dtype=self.dtype)
 
-        self.I = ops.renderer(curve_points, 
-                              self.location, 
-                              self.color, 
-                              self.width, 
-                              self.canvas_height, 
-                              self.canvas_width, 
-                              self.K, 
-                              canvas_color=self.canvas_color, 
-                              dtype=self.dtype)
+        I = ops.renderer(curve_points, 
+                         self.location, 
+                         self.color, 
+                         self.width, 
+                         self.canvas_height, 
+                         self.canvas_width, 
+                         self.K, 
+                         canvas_color=self.canvas_color, 
+                         dtype=self.dtype)
 
-    def _losses(self):
+        return I
+
+    def _optimize(self):
         # resize images to save memory
-        rendered_canvas_resized = \
-            tf.image.resize_nearest_neighbor(images=ops.preprocess_img(self.I),
-                                             size=(int(self.canvas_height // 2), int(self.canvas_width // 2)))
 
-        content_img_resized = \
-            tf.image.resize_nearest_neighbor(images=ops.preprocess_img(self.content_img),
-                                             size=(int(self.canvas_height // 2), int(self.canvas_width // 2)))
+        def loss():
+            I = self._render()
+            rendered_canvas_resized = \
+                tf.image.resize(images=ops.preprocess_img(I),
+                                size=(int(self.canvas_height // 2), int(self.canvas_width // 2)),
+                                method='nearest')
+            content_img_resized = \
+                tf.image.resize(images=ops.preprocess_img(self.content_img),
+                                size=(int(self.canvas_height // 2), int(self.canvas_width // 2)),
+                                method='nearest')
+            style_img_resized = \
+                tf.image.resize(images=ops.preprocess_img(self.style_img),
+                                size=(int(self.canvas_height // 2), int(self.canvas_width // 2)),
+                                method='nearest')
+    
+            self.loss_dict = {}
+            self.loss_dict['content'] = ops.content_loss(self.vgg.extract_features(rendered_canvas_resized),
+                                                         self.vgg.extract_features(content_img_resized),
+                                                         #layers=['conv1_2', 'conv2_2', 'conv3_2', 'conv4_2', 'conv5_2'],
+                                                         layers=['conv4_2', 'conv5_2'],
+                                                         weights=[1, 1],
+                                                         scale_by_y=True)
+            self.loss_dict['content'] *= self.content_weight
 
-        style_img_resized = \
-            tf.image.resize_nearest_neighbor(images=ops.preprocess_img(self.style_img),
-                                             size=(int(self.canvas_height // 2), int(self.canvas_width // 2)))
+            self.loss_dict['style'] = ops.style_loss(self.vgg.extract_features(rendered_canvas_resized),
+                                                     self.vgg.extract_features(style_img_resized),
+                                                     layers=['conv1_1', 'conv2_1', 'conv3_1', 'conv4_1', 'conv5_1'],
+                                                     weights=[1, 1, 1, 1, 1])
+            self.loss_dict['style'] *= self.style_weight
 
-        self.loss_dict = {}
-        self.loss_dict['content'] = ops.content_loss(self.vgg.extract_features(rendered_canvas_resized),
-                                                     self.vgg.extract_features(content_img_resized),
-                                                     #layers=['conv1_2', 'conv2_2', 'conv3_2', 'conv4_2', 'conv5_2'],
-                                                     layers=['conv4_2', 'conv5_2'],
-                                                     weights=[1, 1],
-                                                     scale_by_y=True)
-        self.loss_dict['content'] *= self.content_weight
+            self.loss_dict['tv'] = ops.total_variation_loss(x_loc=self.location, s=self.curve_s, e=self.curve_e, K=10)
+            self.loss_dict['tv'] *= self.tv_weight
 
-        self.loss_dict['style'] = ops.style_loss(self.vgg.extract_features(rendered_canvas_resized),
-                                                 self.vgg.extract_features(style_img_resized),
-                                                 layers=['conv1_1', 'conv2_1', 'conv3_1', 'conv4_1', 'conv5_1'],
-                                                 weights=[1, 1, 1, 1, 1])
-        self.loss_dict['style'] *= self.style_weight
+            if hasattr(self, 'draw_curve_position') and hasattr(self, 'draw_curve_vector'):
+                self.loss_dict['drawing'] = ops.draw_projection_loss(self.location, 
+                                                                     self.curve_s, 
+                                                                     self.curve_e, 
+                                                                     self.draw_curve_position, 
+                                                                     self.draw_curve_vector, 
+                                                                     self.draw_strength)
+                self.loss_dict['drawing'] *= self.draw_weight
 
-        self.loss_dict['curviture'] = ops.curviture_loss(self.curve_s, self.curve_e, self.curve_c)
-        self.loss_dict['curviture'] *= self.curviture_weight
+            self.loss_dict['curviture'] = ops.curviture_loss(self.curve_s, self.curve_e, self.curve_c)
+            self.loss_dict['curviture'] *= self.curviture_weight
+            loss = tf.constant(0.0)
+            for key in self.loss_dict:
+                loss += self.loss_dict[key]
+            return loss
 
-        self.loss_dict['tv'] = ops.total_variation_loss(x_loc=self.location, s=self.curve_s, e=self.curve_e, K=10)
-        self.loss_dict['tv'] *= self.tv_weight
+        def style_loss():
+            I = self._render()
+            rendered_canvas_resized = \
+                tf.image.resize(images=ops.preprocess_img(I),
+                                size=(int(self.canvas_height // 2), int(self.canvas_width // 2)),
+                                method='bilinear')
+            content_img_resized = \
+                tf.image.resize(images=ops.preprocess_img(self.content_img),
+                                size=(int(self.canvas_height // 2), int(self.canvas_width // 2)),
+                                method='bilinear')
+            style_img_resized = \
+                tf.image.resize(images=ops.preprocess_img(self.style_img),
+                                size=(int(self.canvas_height // 2), int(self.canvas_width // 2)),
+                                method='bilinear')
 
-        if hasattr(self, 'draw_curve_position') and hasattr(self, 'draw_curve_vector'):
-            self.loss_dict['drawing'] = ops.draw_projection_loss(self.location, 
-                                                                 self.curve_s, 
-                                                                 self.curve_e, 
-                                                                 self.draw_curve_position, 
-                                                                 self.draw_curve_vector, 
-                                                                 self.draw_strength)
-            self.loss_dict['drawing'] *= self.draw_weight
+            loss = ops.style_loss(self.vgg.extract_features(rendered_canvas_resized),
+                                  self.vgg.extract_features(style_img_resized),
+                                  layers=['conv1_1', 'conv2_1', 'conv3_1', 'conv4_1', 'conv5_1'],
+                                  weights=[1, 1, 1, 1, 1])
+            loss *= self.style_weight
+            return loss
 
+        tf.keras.optimizers.Adam(learning_rate=0.1).minimize(loss, var_list=[self.location, self.curve_s, self.curve_e, self.curve_c, self.width])
+        tf.keras.optimizers.Adam(learning_rate=0.01).minimize(style_loss, var_list=[self.color])
+        self._constraints()
 
-    def _optimizer(self):
-        loss = tf.constant(0.0)
-        for key in self.loss_dict:
-            loss += self.loss_dict[key]
-        
-        step_ops = []
-        optim_step = tf.train.AdamOptimizer(0.1).minimize(
-            loss=loss, 
-            var_list=[self.location, self.curve_s, self.curve_e, self.curve_c, self.width])
-        step_ops.append(optim_step)
-        optim_step_color = tf.train.AdamOptimizer(0.01).minimize(
-            loss=self.loss_dict['style'],
-            var_list=self.color)
-        step_ops.append(optim_step_color)
-
-        # constraint parameters to certain range
-        with tf.control_dependencies(step_ops.copy()):
-            step_ops.append(tf.assign(self.color, tf.clip_by_value(self.color, 0, 1)))
-            coord_x, coord_y = tf.gather(self.location, axis=-1, indices=[0]), tf.gather(self.location, axis=-1, indices=[1])
-            coord_clip = tf.concat([tf.clip_by_value(coord_x, 0, self.canvas_height), tf.clip_by_value(coord_y, 0, self.canvas_width)], axis=-1)
-            step_ops.append(tf.assign(self.location, coord_clip))
-            step_ops.append(tf.assign(self.width, tf.nn.relu(self.width)))
-        self.optim_step_with_constraints = tf.group(*step_ops)
+    def _constraints(self):
+        loc_x, loc_y = tf.gather(self.location, axis=-1, indices=[0]), tf.gather(self.location, axis=-1, indices=[1])
+        loc_clip = tf.concat([tf.clip_by_value(loc_x, 0, self.canvas_height), tf.clip_by_value(loc_y, 0, self.canvas_width)], axis=-1)
+        self.location.assign(loc_clip)
+        self.color.assign(tf.clip_by_value(self.color, 0, 1))
+        self.width.assign(tf.nn.relu(self.width))
 
 
 class PixelOptimizer:
@@ -295,11 +292,11 @@ class PixelOptimizer:
     def __init__(self,
                  canvas,                              # Canvas (PIL.Image).
                  style_img,                           # Style image (PIL.Image).
-                 resolution          = 1024,           # Resolution of the canvas.
-                 num_steps           = 2000,           # Number of optimization steps.
+                 resolution          = 1024,          # Resolution of the canvas.
+                 num_steps           = 5000,          # Number of optimization steps.
                  content_weight      = 1.0,           # Weight for the content loss.
-                 style_weight        = 10000.0,           # Weight for the style loss.
-                 tv_weight           = 0.0,        # Weight for the total variation loss.
+                 style_weight        = 10000.0,       # Weight for the style loss.
+                 tv_weight           = 0.0,           # Weight for the total variation loss.
                  streamlit_pbar      = None,          # Progressbar for streamlit app (obj).
                  dtype               = 'float32'      # Data type.
                 ):
@@ -333,6 +330,8 @@ class PixelOptimizer:
         canvas /= 255.0
         style_img /= 255.0
 
+        content_img = canvas
+
         self.canvas_np = canvas
         self.content_img_np = canvas
         self.style_img_np = style_img
@@ -343,80 +342,75 @@ class PixelOptimizer:
 
     def optimize(self):
         self._initialize()
-        self._losses()
-        self._optimizer()
 
-        with tf.Session() as sess:
-            sess.run(tf.global_variables_initializer())
-            steps = trange(self.num_steps, desc='', leave=True)
-            for step in steps:
-                canvas_, loss_dict_, _ = \
-                    sess.run(fetches=[self.canvas, 
-                                      self.loss_dict, 
-                                      self.optim_step_with_constraints],
-                             options=config_pb2.RunOptions(report_tensor_allocations_upon_oom=True)
-                            )
+        steps = trange(self.num_steps, desc='', leave=True)
+        for step in steps:
+            self._optimize()
 
-                s = ''
-                for key in loss_dict_:
-                    loss = loss_dict_[key]
-                    s += key + f': {loss_dict_[key]:.6f}, '
+            s = ''
+            for key in self.loss_dict:
+                loss = self.loss_dict[key].numpy().item()
+                s += key + f': {loss:.4f}, '
 
-                steps.set_description(s[:-2]) 
-                steps.refresh()
-                if self.streamlit_pbar is not None: self.streamlit_pbar.update(1)
-        return Image.fromarray(np.array(np.clip(canvas_, 0, 1) * 255, dtype=np.uint8))
+            steps.set_description(s[:-2]) 
+            steps.refresh()
+            if self.streamlit_pbar is not None: self.streamlit_pbar.update(1)
+        return Image.fromarray(np.array(np.clip(self.canvas.numpy(), 0, 1) * 255, dtype=np.uint8))
 
     def _initialize(self):
         self.canvas = tf.Variable(name='canvas', initial_value=self.canvas_np, dtype=self.dtype)
         self.content_img = tf.constant(name='content_img', value=self.content_img_np, dtype=self.dtype)
         self.style_img = tf.constant(name='style_img', value=self.style_img_np, dtype=self.dtype)
 
-    def _losses(self):
-        # resize images to save memory
-        rendered_canvas_resized = \
-            tf.image.resize_nearest_neighbor(images=ops.preprocess_img(self.canvas),
-                                             size=(int(self.canvas_height), int(self.canvas_width)))
-
-        content_img_resized = \
-            tf.image.resize_nearest_neighbor(images=ops.preprocess_img(self.content_img),
-                                             size=(int(self.canvas_height), int(self.canvas_width)))
-
-        style_img_resized = \
-            tf.image.resize_nearest_neighbor(images=ops.preprocess_img(self.style_img),
-                                             size=(int(self.canvas_height), int(self.canvas_width)))
-
-        self.loss_dict = {}
-        self.loss_dict['content'] = ops.content_loss(self.vgg.extract_features(rendered_canvas_resized),
-                                                     self.vgg.extract_features(content_img_resized),
-                                                     layers=['conv1_2_pool', 'conv2_2_pool', 'conv3_3_pool', 'conv4_3_pool', 'conv5_3_pool'],
-                                                     weights=[1, 1, 1, 1, 1])
-        self.loss_dict['content'] *= self.content_weight
-
-        self.loss_dict['style'] = ops.style_loss(self.vgg.extract_features(rendered_canvas_resized),
-                                                 self.vgg.extract_features(style_img_resized),
-                                                 layers=['conv1_1', 'conv2_1', 'conv3_1', 'conv4_1', 'conv5_1'],
-                                                 weights=[1, 1, 1, 1, 1])
-        self.loss_dict['style'] *= self.style_weight
-
-        self.loss_dict['tv'] = ((tf.nn.l2_loss(self.canvas[1:, :, :] - self.canvas[:-1, :, :]) / self.canvas.shape.as_list()[0]) +
-                                (tf.nn.l2_loss(self.canvas[:, 1:, :] - self.canvas[:, :-1, :]) / self.canvas.shape.as_list()[1]))
-        self.loss_dict['tv'] *= self.tv_weight
-
-    def _optimizer(self):
-        loss = tf.constant(0.0)
-        for key in self.loss_dict:
-            loss += self.loss_dict[key]
+    def _optimize(self):
         
-        step_ops = []
-        optim_step = tf.train.AdamOptimizer(0.01).minimize(loss=loss, var_list=self.canvas)
-        step_ops.append(optim_step)
+        def loss():
+            factor = 1
+            resize_method = 'nearest'
 
-        # constraint parameters to certain range
-        with tf.control_dependencies(step_ops.copy()):
-            step_ops.append(tf.assign(self.canvas, tf.clip_by_value(self.canvas, 0, 1)))
+            # resize images to save memory
+            rendered_canvas_resized = \
+                tf.image.resize(images=ops.preprocess_img(self.canvas),
+                                size=(int(self.canvas_height * factor), int(self.canvas_width * factor)),
+                                method=resize_method)
 
-        self.optim_step_with_constraints = tf.group(*step_ops)
+            content_img_resized = \
+                tf.image.resize(images=ops.preprocess_img(self.content_img),
+                                size=(int(self.canvas_height * factor), int(self.canvas_width * factor)),
+                                method=resize_method)
+
+            style_img_resized = \
+                tf.image.resize(images=ops.preprocess_img(self.style_img),
+                                size=(int(self.canvas_height * factor), int(self.canvas_width * factor)),
+                                method=resize_method)
+
+            self.loss_dict = {}
+            self.loss_dict['content'] = ops.content_loss(self.vgg.extract_features(rendered_canvas_resized),
+                                                    self.vgg.extract_features(content_img_resized),
+                                                    layers=['conv1_2_pool', 'conv2_2_pool', 'conv3_3_pool', 'conv4_3_pool', 'conv5_3_pool'],
+                                                    weights=[1, 1, 1, 1, 1])
+            self.loss_dict['content'] *= self.content_weight
+
+            self.loss_dict['style'] = ops.style_loss(self.vgg.extract_features(rendered_canvas_resized),
+                                                self.vgg.extract_features(style_img_resized),
+                                                layers=['conv1_1', 'conv2_1', 'conv3_1', 'conv4_1', 'conv5_1'],
+                                                weights=[1, 1, 1, 1, 1])
+            self.loss_dict['style'] *= self.style_weight
+
+            self.loss_dict['tv'] = ((tf.nn.l2_loss(self.canvas[1:, :, :] - self.canvas[:-1, :, :]) / self.canvas.shape.as_list()[0]) +
+                               (tf.nn.l2_loss(self.canvas[:, 1:, :] - self.canvas[:, :-1, :]) / self.canvas.shape.as_list()[1]))
+            self.loss_dict['tv'] *= self.tv_weight
+
+            loss = tf.constant(0.0)
+            for key in self.loss_dict:
+                loss += self.loss_dict[key]
+            return loss
+
+        tf.keras.optimizers.Adam(learning_rate=0.01).minimize(loss, var_list=[self.canvas])
+        self._constraints()
+
+    def _constraints(self):
+        self.canvas.assign(tf.clip_by_value(self.canvas, 0, 1))
 
 
 

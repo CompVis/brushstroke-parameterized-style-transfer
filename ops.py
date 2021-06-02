@@ -19,7 +19,6 @@ def norm(x, axis=None, keepdims=None, eps=1e-8):
     Numerically stable norm.
     """
     return tf.sqrt(tf.reduce_sum(tf.square(x), axis=axis, keepdims=keepdims) + eps)
-    #return tf.reduce_sum(tf.square(x), axis=axis, keepdims=keepdims)
 
 
 #---------------------------------------------------------------------
@@ -80,15 +79,7 @@ def renderer(curve_points, locations, colors, widths, H, W, K, canvas_color='gra
     P_y, P_x = tf.meshgrid(t_W, t_H)
     P = tf.stack([P_x, P_y], axis=-1) # [32, 32, 2]
     # Compute now distances from every brushtroke center to every coarse grid cell
-    #P_norms = tf.square(norm(P, axis=-1))
-    #B_center_norms = tf.square(norm(locations, axis=-1))
-    #P_dot_B_center = tf.einsum('xyf,Nf->xyN', P, locations)
-    # [32, 32, N]
-    #D_to_all_B_centers = tf.expand_dims(P_norms, axis=-1) + tf.expand_dims(tf.expand_dims(B_center_norms, axis=0), axis=0) - 2. * P_dot_B_center
-
-    #####
     D_to_all_B_centers = tf.reduce_sum(tf.square(tf.expand_dims(P, axis=-2) - locations), axis=-1) # [H // C, W // C, N]
-    #####
 
     # Find nearest brushstrokes' indices for every coarse grid cell
     _, idcs = tf.math.top_k(-D_to_all_B_centers, k=K) # [32, 32, K]
@@ -110,17 +101,17 @@ def renderer(curve_points, locations, colors, widths, H, W, K, canvas_color='gra
     # First locations of points sampled from curves
     H_, W_, r1, r2, r3 = canvas_with_nearest_Bs.shape.as_list()
     canvas_with_nearest_Bs = tf.reshape(canvas_with_nearest_Bs, shape=(1, H_, W_, r1 * r2 * r3)) # [1, H // 10, W // 10, K * S * 2]
-    canvas_with_nearest_Bs = tf.image.resize_nearest_neighbor(canvas_with_nearest_Bs, size=(H, W)) # [1, H, W, K * S * 2]
+    canvas_with_nearest_Bs = tf.image.resize(canvas_with_nearest_Bs, size=(H, W), method='nearest') # [1, H, W, K * S * 2]
     canvas_with_nearest_Bs = tf.reshape(canvas_with_nearest_Bs, shape=(H, W, r1, r2, r3)) # [H, W, N, S, 2]
     # Now colors of curves
     H_, W_, r1, r2 = canvas_with_nearest_Bs_colors.shape.as_list()
     canvas_with_nearest_Bs_colors = tf.reshape(canvas_with_nearest_Bs_colors, shape=(1, H_, W_, r1 * r2)) # [1, H // 10, W // 10, K * 3]
-    canvas_with_nearest_Bs_colors = tf.image.resize_nearest_neighbor(canvas_with_nearest_Bs_colors, size=(H, W)) # [1, H, W, K * 3]
+    canvas_with_nearest_Bs_colors = tf.image.resize(canvas_with_nearest_Bs_colors, size=(H, W), method='nearest') # [1, H, W, K * 3]
     canvas_with_nearest_Bs_colors = tf.reshape(canvas_with_nearest_Bs_colors, shape=(H, W, r1, r2)) # [H, W, K, 3]
     # And with the brush size
     H_, W_, r1, r2 = canvas_with_nearest_Bs_bs.shape.as_list()
     canvas_with_nearest_Bs_bs = tf.reshape(canvas_with_nearest_Bs_bs, shape=(1, H_, W_, r1 * r2)) # [1, H // 10, W // 10, K]
-    canvas_with_nearest_Bs_bs = tf.image.resize_nearest_neighbor(canvas_with_nearest_Bs_bs, size=(H, W)) # [1, H, W, K]
+    canvas_with_nearest_Bs_bs = tf.image.resize(canvas_with_nearest_Bs_bs, size=(H, W), method='nearest') # [1, H, W, K]
     canvas_with_nearest_Bs_bs = tf.reshape(canvas_with_nearest_Bs_bs, shape=(H, W, r1, r2)) # [H, W, K, 1]
     # Now create full-size canvas
     t_H = tf.linspace(0., float(H), H)
