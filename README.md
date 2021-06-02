@@ -8,6 +8,9 @@ Rethinking Style Transfer: From Pixels to Parameterized Brushstrokes.
 [Dmytro Kotovenko*](https://scholar.google.de/citations?user=T_U8yxwAAAAJ&hl=en), [Matthias Wright*](http://www.matthias-wright.com/), [Arthur Heimbrecht](http://www.aheimbrecht.de/), and [Björn Ommer](https://hci.iwr.uni-heidelberg.de/people/bommer).<br>
 *&nbsp;denotes equal contribution <br>
 
+## Implementations
+We provide implementations in [Tensorflow 1](https://github.com/CompVis/brushstroke-parameterized-style-transfer/tree/tensorflow_v1) and [Tensorflow 2](https://github.com/CompVis/brushstroke-parameterized-style-transfer/tree/tensorflow_v2). In order to reproduce the results from the paper, we recommend the [Tensorflow 1](https://github.com/CompVis/brushstroke-parameterized-style-transfer/tree/tensorflow_v1) implementation.
+
 ## Installation
 1. Clone this repository:
    ```sh
