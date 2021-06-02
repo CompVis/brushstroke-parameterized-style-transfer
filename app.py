@@ -99,6 +99,7 @@ uploaded_style_image = st.sidebar.file_uploader('Upload style image:', type=['pn
 st.sidebar.markdown('<p class="medium-font"><b>Options</b></p>', unsafe_allow_html=True)
 num_steps_stroke = st.sidebar.slider('Brushstroke optimization steps:', 20, 100, 100)
 num_steps_pixel = st.sidebar.slider('Pixel optimization steps:', 100, 5000, 2000)
+num_strokes = st.sidebar.slider('Number of brushstrokes:', 100, 10000, 5000)
 content_weight = st.sidebar.slider('Content weight:', 1.0, 50.0, 1.0)
 style_weight = st.sidebar.slider('Style weight:', 1.0, 50.0, 3.0)
 draw_weight = st.sidebar.slider('Drawing weight', 50.0, 200.0, 100.0)
@@ -229,7 +230,7 @@ if content_img is not None and style_img is not None:
                                                     draw_curve_vector_path='.temp/vectors.npy',
                                                     draw_strength=draw_strength,
                                                     resolution=512,
-                                                    num_strokes=5000,
+                                                    num_strokes=num_strokes,
                                                     num_steps=num_steps_stroke,
                                                     width_scale=stroke_width,
                                                     length_scale=stroke_length,
